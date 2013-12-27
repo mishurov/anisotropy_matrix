@@ -18,7 +18,7 @@
 
 using namespace HDK_AMPlugins;
 
-void 
+void
 newSopOperator(OP_OperatorTable *table)
 {
   table->addOperator(new OP_Operator("hdk_anisotropy_matrix",
@@ -44,7 +44,7 @@ static PRM_Range unsigned_range(PRM_RANGE_RESTRICTED, 0);
 static PRM_Range unsigned_10_range(PRM_RANGE_UI, 0, PRM_RANGE_RESTRICTED, 10);
 static PRM_Range unsigned_50_range(PRM_RANGE_UI, 0, PRM_RANGE_RESTRICTED, 50);
 
-PRM_Template 
+PRM_Template
 SOP_AnisotropyMatrix::myTemplateList[] = {
   PRM_Template(PRM_FLT,  1, &krnl_name, &krnl_default, 0, &unsigned_10_range),
   PRM_Template(PRM_FLT,  1, &srch_name, &srch_default, 0, &unsigned_10_range),
@@ -54,15 +54,15 @@ SOP_AnisotropyMatrix::myTemplateList[] = {
 };
 
 OP_Node *
-SOP_AnisotropyMatrix::myConstructor(OP_Network *net, 
-                                    const char *name, 
+SOP_AnisotropyMatrix::myConstructor(OP_Network *net,
+                                    const char *name,
                                     OP_Operator *op)
 {
     return new SOP_AnisotropyMatrix(net, name, op);
 }
 
-SOP_AnisotropyMatrix::SOP_AnisotropyMatrix(OP_Network *net, 
-                                           const char *name, 
+SOP_AnisotropyMatrix::SOP_AnisotropyMatrix(OP_Network *net,
+                                           const char *name,
                                            OP_Operator *op)
 : SOP_Node(net, name, op) {}
 
@@ -84,23 +84,26 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
 
     gdp->clearAndDestroy();
     GU_Detail gdp_dublicate(true);
-    gdp_dublicate.copy(*geometry_gdp, 
-                       GEO_COPY_ONCE, 
+    gdp_dublicate.copy(*geometry_gdp,
+                       GEO_COPY_ONCE,
                        false,
                        true,
                        GA_DATA_ID_BUMP);
 
     // MATRIX ATTRIBUTES
-    fpreal smoothing_kernel_radius = evalFloat("kernel", 0, 0);//1;
-    fpreal search_radius = evalFloat("search", 0, 0); //2;
-    fpreal scale_addition = evalFloat("scale", 0, 0); //0.1;
-    unsigned particles_threshold = evalInt("threshold", 0, 0); //6;
-    
+    fpreal smoothing_kernel_radius = evalFloat("kernel", 0, 0);
+    fpreal search_radius = evalFloat("search", 0, 0);
+    fpreal scale_addition = evalFloat("scale", 0, 0);
+    unsigned particles_threshold = evalInt("threshold", 0, 0);
+
     GEO_PointTreeGAOffset tree;
     tree.build(particles_gdp, NULL);
 
-    for (GA_Iterator it(particles_gdp->getPointRange()); !it.atEnd(); ++it) {
-      UT_Vector3 particle_pos = particles_gdp->getPos3(*it);
+    GA_Size p_pts = particles_gdp->getNumPoints();
+
+#pragma omp parallel for
+    for (unsigned ii=0; ii<p_pts; ii++) {
+      UT_Vector3 particle_pos = particles_gdp->getPos3(ii);
 
       // Close particles indices
       GEO_PointTreeGAOffset::IdxArrayType close_particles_indices;
@@ -111,7 +114,7 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
       // NOTE from HDK 13:
       // entries() will be renamed to size() in a future version
       unsigned close_particles_count = close_particles_indices.entries();
-      
+
       UT_Matrix3 anisotropy_matrix;
 
       if (close_particles_count > 0) {
@@ -142,19 +145,19 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
         boost::numeric::ublas::matrix<fpreal> weighted_distance_column(3, 1);
         boost::numeric::ublas::matrix<fpreal> weighted_distance_row(1, 3);
         boost::numeric::ublas::matrix<fpreal> covariance_matrix(3, 3);
-        
-        covariance_matrix(0, 0) = covariance_matrix(0, 1) = 
-        covariance_matrix(0, 2) = covariance_matrix(1, 0) = 
-        covariance_matrix(1, 1) = covariance_matrix(1, 2) = 
-        covariance_matrix(2, 0) = covariance_matrix(2, 1) = 
+
+        covariance_matrix(0, 0) = covariance_matrix(0, 1) =
+        covariance_matrix(0, 2) = covariance_matrix(1, 0) =
+        covariance_matrix(1, 1) = covariance_matrix(1, 2) =
+        covariance_matrix(2, 0) = covariance_matrix(2, 1) =
         covariance_matrix(2, 2) = 0;
 
         for (unsigned i = 0; i < close_particles_count; i++) {
           UT_Vector3 close_particle_pos = 
           particles_gdp->getPos3(close_particles_indices(i));
           UT_Vector3 weighted_distance = close_particle_pos - weighted_mean;
-          weighted_distance_column(0, 0) = weighted_distance(0); 
-          weighted_distance_column(1, 0) = weighted_distance(1); 
+          weighted_distance_column(0, 0) = weighted_distance(0);
+          weighted_distance_column(1, 0) = weighted_distance(1);
           weighted_distance_column(2, 0) = weighted_distance(2);
           weighted_distance_row(0, 0) = weighted_distance(0);
           weighted_distance_row(0, 1) = weighted_distance(1);
@@ -163,18 +166,18 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
           UT_Vector3 distance = particle_pos - close_particle_pos;
           weight = 1 - std::pow((distance.length() / search_radius), 3);
           covariance_matrix += 
-          boost::numeric::ublas::prod(weighted_distance_column, 
+          boost::numeric::ublas::prod(weighted_distance_column,
                                       weighted_distance_row) * weight;
         }
 
         if (weighting_function != 0)
           covariance_matrix = covariance_matrix / weighting_function;
-        
+
         // Singular Value Decomposition to get rotation and scale matrix
         boost::numeric::ublas::matrix<fpreal> rotation_matrix(3, 3);
         boost::numeric::ublas::vector<fpreal> eigen_values_vector(3);
         boost::numeric::ublas::matrix<fpreal> rotation_matrix_transpose(3, 3);
-        boost::numeric::bindings::lapack::gesvd(covariance_matrix, 
+        boost::numeric::bindings::lapack::gesvd(covariance_matrix,
                                                 eigen_values_vector,
                                                 rotation_matrix,
                                                 rotation_matrix_transpose);
@@ -182,16 +185,16 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
         // Particles threshold
         if (close_particles_count > particles_threshold) {
           for (unsigned i = 0; i < 3; i++)
-            eigen_values_vector(i) = 2 * eigen_values_vector(i) + 
+            eigen_values_vector(i) = 2 * eigen_values_vector(i) +
                                      scale_addition;
         } else {
-          eigen_values_vector(0) = 
-          eigen_values_vector(1) = 
+          eigen_values_vector(0) =
+          eigen_values_vector(1) =
           eigen_values_vector(2) = 1;
         }
 
         // Convert to HDK matrices
-        UT_Matrix3 rotation_matrix_hdk(rotation_matrix(0, 0), 
+        UT_Matrix3 rotation_matrix_hdk(rotation_matrix(0, 0),
                                        rotation_matrix(0, 1),
                                        rotation_matrix(0, 2),
                                        rotation_matrix(1, 0),
@@ -200,45 +203,47 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
                                        rotation_matrix(2, 0),
                                        rotation_matrix(2, 1),
                                        rotation_matrix(2, 2));
-        
-        UT_Matrix3 eigen_values_matrix_hdk(eigen_values_vector(0), 0, 0,     
-                                           0, eigen_values_vector(1), 0,    
+
+        UT_Matrix3 eigen_values_matrix_hdk(eigen_values_vector(0), 0, 0,
+                                           0, eigen_values_vector(1), 0,
                                            0, 0, eigen_values_vector(2));
-        
+
         rotation_matrix_hdk.invert();
         UT_Matrix3 rotation_matrix_transpose_hdk = rotation_matrix_hdk;
         rotation_matrix_transpose_hdk.transpose();
 
         // Compose anisotropy matrix
-        anisotropy_matrix = rotation_matrix_hdk * 
-                            eigen_values_matrix_hdk * 
+        anisotropy_matrix = rotation_matrix_hdk *
+                            eigen_values_matrix_hdk *
                             rotation_matrix_transpose_hdk;
         anisotropy_matrix *= 1 / smoothing_kernel_radius;
       }
 
       // Calculate new transormations for dublicate geometry
-      for (GA_Iterator itd(gdp_dublicate.getPointRange()); 
-           !itd.atEnd(); 
-           ++itd) {
+      GA_Size g_pts = geometry_gdp->getNumPoints();
 
-        UT_Vector3 geometry_pos = geometry_gdp->getPos3(*itd);
-        if (close_particles_count > 0)
-          geometry_pos.colVecMult(anisotropy_matrix);
-        gdp_dublicate.setPos3(*itd, geometry_pos + particle_pos);
+#pragma omp critical
+      {
+        for (unsigned ee=0; ee < g_pts; ee++) {
+          UT_Vector3 geometry_pos = geometry_gdp->getPos3(ee);
+          if (close_particles_count > 0)
+            geometry_pos.colVecMult(anisotropy_matrix);
 
-      }
+          gdp_dublicate.setPos3(ee, geometry_pos + particle_pos);
+        }
 
-      // Add geometry copy to final geometry
-      gdp->copy(gdp_dublicate, 
-                GEO_COPY_ADD, 
-                true, 
-                true, 
-                GA_DATA_ID_BUMP);
+        // Add geometry copy to final geometry
+        gdp->copy(gdp_dublicate,
+                  GEO_COPY_ADD,
+                  true,
+                  true,
+                  GA_DATA_ID_BUMP);
+      } // end of pragma omp critical
     }
   }
 
   unlockInputs();
   resetLocalVarRefs();
-  
+
   return error();
 }

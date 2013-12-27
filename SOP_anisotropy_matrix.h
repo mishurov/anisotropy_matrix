@@ -17,6 +17,7 @@
 #ifndef HDKPLUGIN_SOPANISOTROPICMATRIX_H_
 #define HDKPLUGIN_SOPANISOTROPICMATRIX_H_
 
+#include <omp.h>
 #include <SYS/SYS_Math.h>
 #include <UT/UT_DSOVersion.h>
 #include <UT/UT_Interrupt.h>
