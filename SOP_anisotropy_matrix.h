@@ -28,11 +28,6 @@
 #include <PRM/PRM_Include.h>
 #include <GU/GU_Detail.h>
 #include <GEO/GEO_PointTree.h>
-#include <boost/numeric/bindings/traits/ublas_matrix.hpp>
-#include <boost/numeric/bindings/traits/ublas_vector.hpp>
-#include <boost/numeric/bindings/lapack/gesvd.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/numeric/ublas/vector.hpp>
 
 namespace HDK_AMPlugins {
 

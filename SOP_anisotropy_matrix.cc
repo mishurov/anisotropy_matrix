@@ -101,7 +101,6 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
 
     GA_Size p_pts = particles_gdp->getNumPoints();
 
-#pragma omp parallel for
     for (unsigned ii=0; ii<p_pts; ii++) {
       UT_Vector3 particle_pos = particles_gdp->getPos3(ii);
 
@@ -141,46 +140,40 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
         else
           weighted_mean = weighted_position;
 
-        // Calculation of covariance matrix
-        boost::numeric::ublas::matrix<fpreal> weighted_distance_column(3, 1);
-        boost::numeric::ublas::matrix<fpreal> weighted_distance_row(1, 3);
-        boost::numeric::ublas::matrix<fpreal> covariance_matrix(3, 3);
+        // Calculation of covariance matrix and SVD -- example code provided by ndickson, thank you!
+        UT_Matrix3D covariance_matrix(0); 
+        for (unsigned i = 0; i < close_particles_count; i++) { 
+            UT_Vector3 close_particle_pos = 
+                particles_gdp->getPos3(close_particles_indices(i)); 
+            UT_Vector3 weighted_distance = close_particle_pos - weighted_mean; 
+            UT_Vector3 distance = particle_pos - close_particle_pos; 
+            weight = 1 - std::pow((distance.length() / search_radius), 3); 
+            UT_Vector3 weighted = weight * weighted_distance; 
+            // Only 6 unique components, since symmetric 
+            covariance_matrix(0,0) += weighted(0)*weighted_distance(0); 
+            covariance_matrix(0,1) += weighted(0)*weighted_distance(1); 
+            covariance_matrix(0,2) += weighted(0)*weighted_distance(2); 
+            covariance_matrix(1,1) += weighted(1)*weighted_distance(1); 
+            covariance_matrix(1,2) += weighted(1)*weighted_distance(2); 
+            covariance_matrix(2,2) += weighted(2)*weighted_distance(2); 
+        } 
 
-        covariance_matrix(0, 0) = covariance_matrix(0, 1) =
-        covariance_matrix(0, 2) = covariance_matrix(1, 0) =
-        covariance_matrix(1, 1) = covariance_matrix(1, 2) =
-        covariance_matrix(2, 0) = covariance_matrix(2, 1) =
-        covariance_matrix(2, 2) = 0;
+        // Copy symmetric components 
+        covariance_matrix(1,0) = covariance_matrix(0,1); 
+        covariance_matrix(2,0) = covariance_matrix(0,2); 
+        covariance_matrix(2,1) = covariance_matrix(1,2); 
 
-        for (unsigned i = 0; i < close_particles_count; i++) {
-          UT_Vector3 close_particle_pos = 
-          particles_gdp->getPos3(close_particles_indices(i));
-          UT_Vector3 weighted_distance = close_particle_pos - weighted_mean;
-          weighted_distance_column(0, 0) = weighted_distance(0);
-          weighted_distance_column(1, 0) = weighted_distance(1);
-          weighted_distance_column(2, 0) = weighted_distance(2);
-          weighted_distance_row(0, 0) = weighted_distance(0);
-          weighted_distance_row(0, 1) = weighted_distance(1);
-          weighted_distance_row(0, 2) = weighted_distance(2);
+        if (weighting_function != 0) 
+            covariance_matrix /= weighting_function; 
 
-          UT_Vector3 distance = particle_pos - close_particle_pos;
-          weight = 1 - std::pow((distance.length() / search_radius), 3);
-          covariance_matrix += 
-          boost::numeric::ublas::prod(weighted_distance_column,
-                                      weighted_distance_row) * weight;
-        }
+        UT_Matrix3D rotation_matrix; 
+        UT_Matrix3D diagonal_matrix; // diagonal will hold eigenvalues 
 
-        if (weighting_function != 0)
-          covariance_matrix = covariance_matrix / weighting_function;
+        // This is probably overkill; there are likely faster algorithms, but this should work, up to some tolerance. 
+        covariance_matrix.diagonalizeSymmetric(rotation_matrix,diagonal_matrix); 
 
-        // Singular Value Decomposition to get rotation and scale matrix
-        boost::numeric::ublas::matrix<fpreal> rotation_matrix(3, 3);
-        boost::numeric::ublas::vector<fpreal> eigen_values_vector(3);
-        boost::numeric::ublas::matrix<fpreal> rotation_matrix_transpose(3, 3);
-        boost::numeric::bindings::lapack::gesvd(covariance_matrix,
-                                                eigen_values_vector,
-                                                rotation_matrix,
-                                                rotation_matrix_transpose);
+        UT_Vector3D eigen_values_vector(diagonal_matrix(0,0), diagonal_matrix(1,1), diagonal_matrix(2,2));
+        // End SVD/CovarianceMatrix
 
         // Particles threshold
         if (close_particles_count > particles_threshold) {
@@ -222,23 +215,22 @@ SOP_AnisotropyMatrix::cookMySop(OP_Context &context)
       // Calculate new transormations for dublicate geometry
       GA_Size g_pts = geometry_gdp->getNumPoints();
 
-#pragma omp critical
-      {
-        for (unsigned ee=0; ee < g_pts; ee++) {
-          UT_Vector3 geometry_pos = geometry_gdp->getPos3(ee);
-          if (close_particles_count > 0)
-            geometry_pos.colVecMult(anisotropy_matrix);
 
-          gdp_dublicate.setPos3(ee, geometry_pos + particle_pos);
-        }
+    for (unsigned ee=0; ee < g_pts; ee++) {
+      UT_Vector3 geometry_pos = geometry_gdp->getPos3(ee);
+      if (close_particles_count > 0)
+        geometry_pos.colVecMult(anisotropy_matrix);
 
-        // Add geometry copy to final geometry
-        gdp->copy(gdp_dublicate,
-                  GEO_COPY_ADD,
-                  true,
-                  true,
-                  GA_DATA_ID_BUMP);
-      } // end of pragma omp critical
+      gdp_dublicate.setPos3(ee, geometry_pos + particle_pos);
+    }
+
+    // Add geometry copy to final geometry
+    gdp->copy(gdp_dublicate,
+              GEO_COPY_ADD,
+              true,
+              true,
+              GA_DATA_ID_BUMP);
+
     }
   }
 
