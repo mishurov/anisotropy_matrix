@@ -10,4 +10,4 @@ In order to compile plugin you need to link it with <a href="http://www.netlib.o
 ## Building
 To compile on Linux, use Makefile. OSX and Windows are not tested.
 
-![ScreenShot2](http://mishurov.usite.pro)
+![ScreenShot2](http://mishurov.usite.pro/github/anisotropy_matrix/kernels2.png)
