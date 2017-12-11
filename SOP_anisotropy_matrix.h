@@ -1,5 +1,5 @@
 /* ************************************************************************
- * Copyright 2013 Alexander Mishurov
+ * Copyright 2017 Alexander Mishurov
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,40 +14,31 @@
  * limitations under the License.
  * ************************************************************************/
 
+
 #ifndef HDKPLUGIN_SOPANISOTROPICMATRIX_H_
 #define HDKPLUGIN_SOPANISOTROPICMATRIX_H_
 
-#include <omp.h>
-#include <SYS/SYS_Math.h>
-#include <UT/UT_DSOVersion.h>
-#include <UT/UT_Interrupt.h>
-#include <UT/UT_Matrix4.h>
-#include <OP/OP_Operator.h>
-#include <OP/OP_OperatorTable.h>
+
 #include <SOP/SOP_Node.h>
-#include <PRM/PRM_Include.h>
-#include <GU/GU_Detail.h>
-#include <GEO/GEO_PointTree.h>
-#include <boost/numeric/bindings/traits/ublas_matrix.hpp>
-#include <boost/numeric/bindings/traits/ublas_vector.hpp>
-#include <boost/numeric/bindings/lapack/gesvd.hpp>
-#include <boost/numeric/ublas/matrix.hpp>
-#include <boost/numeric/ublas/vector.hpp>
+
 
 namespace HDK_AMPlugins {
+
 
 class SOP_AnisotropyMatrix : public SOP_Node
 {
 public:
-  SOP_AnisotropyMatrix(OP_Network *, const char *, OP_Operator *);
-  virtual ~SOP_AnisotropyMatrix();
-  static OP_Node *myConstructor(OP_Network *, const char *, OP_Operator *);
-public:
-  static PRM_Template myTemplateList[];
+	static OP_Node *myConstructor(OP_Network *net, const char *name,
+						OP_Operator *op);
+	static PRM_Template myTemplateList[];
 
+	SOP_AnisotropyMatrix(OP_Network *net, const char *name,
+						OP_Operator *op);
+	virtual ~SOP_AnisotropyMatrix();
 protected:
-  virtual OP_ERROR cookMySop(OP_Context &);
+	virtual OP_ERROR cookMySop(OP_Context &);
 };
+
 
 } // HDK_AMPlugins namespace
 
