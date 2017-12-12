@@ -20,6 +20,8 @@
 
 
 #include <SOP/SOP_Node.h>
+#include <GU/GU_Detail.h>
+#include <GEO/GEO_PointTree.h>
 
 
 namespace HDK_AMPlugins {
@@ -28,15 +30,36 @@ namespace HDK_AMPlugins {
 class SOP_AnisotropyMatrix : public SOP_Node
 {
 public:
-	static OP_Node *myConstructor(OP_Network *net, const char *name,
-						OP_Operator *op);
-	static PRM_Template myTemplateList[];
-
 	SOP_AnisotropyMatrix(OP_Network *net, const char *name,
 						OP_Operator *op);
 	virtual ~SOP_AnisotropyMatrix();
+
+	static OP_Node *myConstructor(OP_Network *net, const char *name,
+						OP_Operator *op);
+	THREADED_METHOD2(
+			SOP_AnisotropyMatrix,
+			p_pts > 100,
+			compute,
+			GU_Detail&, gdp_dublicate,
+			GEO_PointTreeGAOffset&, tree)
+	void computePartial(
+		GU_Detail& gdp_dublicate,
+		GEO_PointTreeGAOffset& tree,
+		const UT_JobInfo &info);
+
+public:
+	static PRM_Template myTemplateList[];
+	GA_Size  p_pts;
+
 protected:
 	virtual OP_ERROR cookMySop(OP_Context &);
+private:
+	fpreal smoothing_kernel_radius_;
+	fpreal search_radius_;
+	fpreal scaling_factor_;
+	int particles_threshold_;
+	GU_Detail* particles_gdp_;
+	GU_Detail* geometry_gdp_;
 };
 
 
